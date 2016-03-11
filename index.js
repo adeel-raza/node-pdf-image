@@ -6,30 +6,34 @@ var path = require("path");
 var fs   = require("fs");
 var util = require("util");
 var exec = require("child_process").exec;
+var os = require('os')
 
-function PDFImage(pdfFilePath, options) {
-  if (!options) options = {};
+function PDFImage(pdfFilePath,options) {
+    if (!options) options = {};
 
-  this.pdfFilePath = pdfFilePath;
-  this.pdfFileBaseName = path.basename(pdfFilePath, ".pdf");
+    this.pdfFilePath = pdfFilePath;
+    this.pdfFileBaseName = path.basename(pdfFilePath, ".pdf");
 
   this.setConvertOptions(options.convertOptions);
   this.setConvertExtension(options.convertExtension);
   this.useGM = options.graphicsMagick || false;
+  var outputFilePath = options.outputFilePath || pdfFilePath;
 
-  this.outputDirectory = options.outputDirectory || path.dirname(pdfFilePath);
+  this.outputDirectory = options.outputDirectory || path.normalize(path.dirname(outputFilePath));
+
+  this.bin = options.bin ? '"' + (options.bin + '\\convert') + '"' : 'convert';
 }
 
 PDFImage.prototype = {
   constructGetInfoCommand: function () {
     return util.format(
-      "pdfinfo '%s'",
+      'pdfinfo "%s"',
       this.pdfFilePath
     );
   },
   parseGetInfoCommandOutput: function (output) {
     var info = {};
-    output.split("\n").forEach(function (line) {
+    output.split(os.EOL).forEach(function (line) {
       if (line.match(/^(.*?):[ \t]*(.*)$/)) {
         info[RegExp.$1] = RegExp.$2;
       }
@@ -40,8 +44,11 @@ PDFImage.prototype = {
     var self = this;
     var getInfoCommand = this.constructGetInfoCommand();
     var promise = new Promise(function (resolve, reject) {
-      exec(getInfoCommand, function (err, stdout, stderr) {
-        if (err) {
+    exec(getInfoCommand, function (err, stdout, stderr) {
+          if (err) {
+//              console.log("error:" + err)
+//              return;
+
           return reject({
             message: "Failed to get PDF'S information",
             error: err,
@@ -75,9 +82,10 @@ PDFImage.prototype = {
     var pdfFilePath = this.pdfFilePath;
     var outputImagePath = this.getOutputImagePathForPage(pageNumber);
     var convertOptionsString = this.constructConvertOptions();
+
     return util.format(
       "%s %s'%s[%d]' '%s'",
-      this.useGM ? "gm convert" : "convert",
+      this.useGM ? "gm convert" : this.bin,
       convertOptionsString ? convertOptionsString + " " : "",
       pdfFilePath, pageNumber, outputImagePath
     );
@@ -100,6 +108,7 @@ PDFImage.prototype = {
       function convertPageToImage() {
         exec(convertCommand, function (err, stdout, stderr) {
           if (err) {
+              console.log(err);
             return reject({
               message: "Failed to convert page to image",
               error: err,
